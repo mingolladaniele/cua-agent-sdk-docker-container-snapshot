@@ -10,6 +10,59 @@ Enable CUA agents to create and restore container snapshots at key execution poi
 - **Reliability**: Recover from failures by restoring known good states
 - **Development**: Test agent workflows with consistent starting states
 
+## System Overview
+
+### Core Components
+
+#### 1. **SnapshotManager** - Central Orchestrator
+- Coordinates all snapshot operations
+- Enforces retention policies and storage limits
+- Manages operation conflicts and locking
+- Provides unified API for all snapshot operations
+
+#### 2. **DockerSnapshotProvider** - Container Interface
+- Uses `docker commit` for efficient container snapshots
+- Preserves container configuration for accurate restoration
+- Handles Docker image lifecycle management
+- Validates container states before operations
+
+#### 3. **FileSystemSnapshotStorage** - Persistence Layer
+- JSON-based metadata storage with efficient indexing
+- Container-to-snapshot relationship tracking
+- Storage statistics and monitoring
+- Atomic operations for data consistency
+
+#### 4. **SnapshotCallback** - CUA Agent Integration
+- Hooks into CUA Agent SDK lifecycle events
+- Configurable trigger policies for automatic snapshots
+- Non-blocking operation design
+- Automatic container context resolution
+
+#### 5. **CLI Interface** - Management Tool
+- Complete command-line interface for all operations
+- Human-readable output and JSON export options
+- Configuration management and scripting support
+
+### Snapshot Triggers
+
+The system automatically creates snapshots based on configurable triggers:
+
+- **`MANUAL`**: Developer-initiated snapshots
+- **`RUN_START`**: Beginning of agent execution
+- **`RUN_END`**: End of agent execution  
+- **`BEFORE_ACTION`**: Before each agent action (click, type, screenshot, etc.)
+- **`AFTER_ACTION`**: After each agent action completes
+- **`ON_ERROR`**: When errors occur (planned)
+- **`PERIODIC`**: Time-based intervals (planned)
+
+### Data Flow
+
+1. **CUA Agent starts** → Callback triggers `RUN_START` snapshot
+2. **Agent decides on action** → Callback triggers `BEFORE_ACTION` snapshot
+3. **Agent performs action** → Action executes (click, type, etc.)
+4. **Action completes** → Callback triggers `AFTER_ACTION` snapshot
+5. **Agent finishes** → Callback triggers `RUN_END` snapshot
+
 ## Main Features
 
 ### **Core Functionality (Implemented & Tested)**
@@ -20,20 +73,20 @@ Enable CUA agents to create and restore container snapshots at key execution poi
 - **Rich Configuration**: Multiple triggers, naming patterns, and limits
 - **CLI Interface**: Complete command-line tool for all operations
 
+### **CUA Agent SDK Integration**
+- **Callback System**: Hooks into agent lifecycle events automatically
+- **Configurable Triggers**: Manual, run start/end, before/after actions
+- **Pluggable Design**: Enable/disable without code changes
+- **Non-Intrusive**: Doesn't break existing agent workflows
+
 ## Quick Start
 
 ### Installation
 
-1. **Clone and setup environment:**
 ```bash
 git clone <repository-url>
 cd cua-agent-sdk-docker-container-snapshot
-uv sync  # or pip install -e .
-```
-
-2. **Verify installation:**
-```bash
-uv run snapshot-manager --help
+uv sync
 ```
 
 ### Prerequisites
@@ -41,65 +94,51 @@ uv run snapshot-manager --help
 - Python 3.8+
 - A running Docker container to snapshot
 
-## 📖 Basic Usage
+### Basic Usage
 
-### CLI Commands
+#### CLI Commands
 
-#### Create a Snapshot
 ```bash
-# Basic snapshot
+# Create a snapshot
 uv run snapshot-manager create my-container --description "Before risky operation"
 
-# With custom trigger and context
-uv run snapshot-manager create my-container \
-  --trigger run_start \
-  --description "Agent run beginning" \
-  --context "initialization"
-```
-
-#### List Snapshots
-```bash
-# List all snapshots
+# List snapshots
 uv run snapshot-manager list
 
-# Filter by container
-uv run snapshot-manager list --container my-container
-
-# JSON output for scripts
-uv run snapshot-manager list --json-output
-```
-
-#### Restore from Snapshot
-```bash
-# Restore to new container
+# Restore from snapshot
 uv run snapshot-manager restore <snapshot-id> --container-name restored-container
 
-# With custom options
-uv run snapshot-manager restore <snapshot-id> \
-  --container-name my-app-restored \
-  --preserve-networks \
-  --preserve-volumes
-```
-
-#### Storage Management
-```bash
 # View storage statistics
 uv run snapshot-manager stats
 
 # Clean up old snapshots
 uv run snapshot-manager cleanup --max-age-days 7
-
-# Delete specific snapshot
-uv run snapshot-manager delete <snapshot-id>
 ```
 
-#### Container Validation
-```bash
-# Check if container can be snapshotted
-uv run snapshot-manager validate my-container
+#### CUA Agent Integration
+
+```python
+from snapshot_manager import SnapshotCallback, SnapshotConfig, SnapshotTrigger
+
+# Configure snapshot behavior
+config = SnapshotConfig(
+    triggers=[SnapshotTrigger.RUN_START, SnapshotTrigger.RUN_END],
+    max_snapshots_per_container=5,
+    storage_path="./agent_snapshots"
+)
+
+# Create callback for CUA Agent
+snapshot_callback = SnapshotCallback(config=config)
+
+# Integrate with your agent
+agent = ComputerAgent(
+    model="anthropic/claude-3-5-sonnet-20241022",
+    tools=[computer],
+    callbacks=[snapshot_callback]  # Add snapshot support
+)
 ```
 
-### Programmatic Usage
+#### Programmatic Usage
 
 ```python
 import asyncio
@@ -124,9 +163,9 @@ async def main():
 asyncio.run(main())
 ```
 
-## ⚙️ Configuration
+## Configuration
 
-Create a configuration file (`snapshot-config.json`):
+### Configuration File (`snapshot-config.json`)
 
 ```json
 {
@@ -140,12 +179,31 @@ Create a configuration file (`snapshot-config.json`):
 }
 ```
 
-Use with CLI:
-```bash
-uv run snapshot-manager --config snapshot-config.json create my-container
+### Trigger Configuration Examples
+
+```python
+# Development mode - capture everything for debugging
+development_config = SnapshotConfig(
+    triggers=[
+        SnapshotTrigger.RUN_START,
+        SnapshotTrigger.BEFORE_ACTION,
+        SnapshotTrigger.AFTER_ACTION,
+        SnapshotTrigger.RUN_END
+    ]
+)
+
+# Production mode - minimal overhead
+production_config = SnapshotConfig(
+    triggers=[SnapshotTrigger.RUN_START, SnapshotTrigger.RUN_END]
+)
+
+# Safety mode - always have rollback points
+safety_config = SnapshotConfig(
+    triggers=[SnapshotTrigger.RUN_START, SnapshotTrigger.BEFORE_ACTION]
+)
 ```
 
-## 📊 Example Workflow
+## Example Workflow
 
 ```bash
 # 1. Start a test container
@@ -167,22 +225,58 @@ uv run snapshot-manager list
 uv run snapshot-manager restore <first-snapshot-id> --container-name webapp-restored
 
 # 7. Verify restoration worked
-docker exec webapp-restored cat /usr/share/nginx/html/index.html  # Should be original nginx page
-docker exec webapp cat /usr/share/nginx/html/index.html          # Should be "Hello CUA!"
+docker exec webapp-restored cat /usr/share/nginx/html/index.html  # Original page
+docker exec webapp cat /usr/share/nginx/html/index.html          # "Hello CUA!"
 ```
 
-## 🛠️ Development
+## Storage Structure
+
+```
+.snapshots/
+├── metadata/
+│   ├── snapshot-uuid-1.json  # Individual snapshot metadata
+│   ├── snapshot-uuid-2.json
+│   └── ...
+└── index.json               # Master index for fast queries
+```
+
+### Snapshot Metadata Format
+
+```json
+{
+  "snapshot_id": "uuid",
+  "container_id": "docker_container_id", 
+  "container_name": "container_name",
+  "timestamp": "2025-08-15T09:50:55",
+  "trigger": "manual|run_start|run_end|after_action",
+  "status": "creating|completed|failed|deleted",
+  "image_id": "docker_image_id",
+  "image_tag": "cua-snapshot/name:trigger-timestamp", 
+  "size_bytes": 8294400,
+  "description": "Human readable description",
+  "labels": {"key": "value"},
+  "agent_metadata": {
+    "run_id": "agent_run_id",
+    "original_config": "container_configuration",
+    "restoration_count": 0
+  }
+}
+```
+
+## Development
 
 ```bash
 # Setup development environment
 uv sync
+
+# Run code formatting
+uv run ruff check --fix src/ tests/ examples/
+uv run black src/ tests/ examples/
+uv run isort src/ tests/ examples/
 
 # Run tests
 uv run pytest
 
 # Install in development mode
 pip install -e .
-
-# Build package
-python -m build
 ```
