@@ -80,7 +80,7 @@ The system automatically creates snapshots based on configurable triggers:
 ### Installation
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/mingolladaniele/cua-agent-sdk-docker-container-snapshot.git
 cd cua-agent-sdk-docker-container-snapshot
 uv sync
 ```
