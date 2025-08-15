@@ -34,7 +34,7 @@ Enable CUA agents to create and restore container snapshots at key execution poi
 - JSON-based metadata storage with efficient indexing
 - Container-to-snapshot relationship tracking
 - Storage statistics and monitoring
-- Atomic operations for data consistency
+- Safe concurrent operations with proper sequencing
 
 #### 4. **SnapshotCallback** - CUA Agent Integration
 - Hooks into CUA Agent SDK lifecycle events
@@ -54,10 +54,10 @@ The system automatically creates snapshots based on configurable triggers:
 - **`MANUAL`**: Developer-initiated snapshots
 - **`RUN_START`**: Beginning of agent execution
 - **`RUN_END`**: End of agent execution  
-- **`BEFORE_ACTION`**: Before each agent action (click, type, screenshot, etc.)
-- **`AFTER_ACTION`**: After each agent action completes
-- **`ON_ERROR`**: When errors occur
-- **`PERIODIC`**: Time-based intervals
+- **`BEFORE_ACTION`**: Before each agent action (planned)
+- **`AFTER_ACTION`**: After each agent action completes (planned)
+- **`ON_ERROR`**: When errors occur (planned)
+- **`PERIODIC`**: Time-based intervals (planned)
 
 ## Main Features
 
@@ -70,10 +70,10 @@ The system automatically creates snapshots based on configurable triggers:
 - **CLI Interface**: Complete command-line tool for all operations
 
 ### **CUA Agent SDK Integration**
-- **Callback System**: Hooks into agent lifecycle events automatically
-- **Configurable Triggers**: Manual, run start/end, before/after actions
-- **Pluggable Design**: Enable/disable without code changes
-- **Non-Intrusive**: Doesn't break existing agent workflows
+- **Manual Integration**: Programmatic snapshot creation before/after agent tasks
+- **Configurable Triggers**: Manual snapshots with planned automatic triggers
+- **Pluggable Design**: Easy to integrate without modifying existing workflows
+- **Non-Intrusive**: Doesn't affect agent execution performance
 
 ## Quick Start
 
@@ -83,6 +83,18 @@ The system automatically creates snapshots based on configurable triggers:
 git clone https://github.com/mingolladaniele/cua-agent-sdk-docker-container-snapshot.git
 cd cua-agent-sdk-docker-container-snapshot
 uv sync
+```
+
+### Quick start
+```bash
+# Tested on W11 + Docker Desktop
+
+# Activate virtual environment
+source .venv/Scripts/activate  # Windows
+# source .venv/bin/activate     # Linux/Mac
+
+# Run integration test
+python examples/cua_snapshot_test.py
 ```
 
 ### Prerequisites
@@ -235,7 +247,7 @@ asyncio.run(main())
 
 ```json
 {
-  "triggers": ["run_start", "run_end", "after_action"],
+  "triggers": ["manual"],
   "storage_path": "./snapshots",
   "max_snapshots_per_container": 10,
   "max_total_snapshots": 100,
@@ -248,25 +260,27 @@ asyncio.run(main())
 ### Trigger Configuration Examples
 
 ```python
-# Development mode - capture everything for debugging
-development_config = SnapshotConfig(
-    triggers=[
-        SnapshotTrigger.RUN_START,
-        SnapshotTrigger.BEFORE_ACTION,
-        SnapshotTrigger.AFTER_ACTION,
-        SnapshotTrigger.RUN_END
-    ]
+# Current implementation - manual snapshots
+current_config = SnapshotConfig(
+    triggers=[SnapshotTrigger.MANUAL],
+    max_snapshots_per_container=5,
+    storage_path="./snapshots"
 )
 
-# Production mode - minimal overhead
-production_config = SnapshotConfig(
-    triggers=[SnapshotTrigger.RUN_START, SnapshotTrigger.RUN_END]
-)
+# Planned: Development mode - capture everything for debugging
+# development_config = SnapshotConfig(
+#     triggers=[
+#         SnapshotTrigger.RUN_START,
+#         SnapshotTrigger.BEFORE_ACTION,
+#         SnapshotTrigger.AFTER_ACTION,
+#         SnapshotTrigger.RUN_END
+#     ]
+# )
 
-# Safety mode - always have rollback points
-safety_config = SnapshotConfig(
-    triggers=[SnapshotTrigger.RUN_START, SnapshotTrigger.BEFORE_ACTION]
-)
+# Planned: Production mode - minimal overhead
+# production_config = SnapshotConfig(
+#     triggers=[SnapshotTrigger.RUN_START, SnapshotTrigger.RUN_END]
+# )
 ```
 
 ## Example Workflow
@@ -355,10 +369,10 @@ docker exec webapp cat /usr/share/nginx/html/index.html          # "Hello CUA!"
 - **Rationale**: Non-blocking integration with CUA Agent SDK, better resource utilization
 - **Tradeoff**: Slightly more complex API but essential for production use
 
-#### **5. Callback-Based Integration**
-- **Decision**: Hook into CUA SDK via callback system
-- **Rationale**: Clean, opt-in integration that doesn't break existing workflows
-- **Tradeoff**: Requires callback setup but maintains system integrity
+#### **5. Manual Integration Approach**
+- **Decision**: Manual snapshot creation with programmatic API
+- **Rationale**: Simple, reliable integration that works with any agent framework
+- **Tradeoff**: Requires explicit calls but provides full control and reliability
 
 ### **Performance & Storage Decisions**
 
@@ -392,10 +406,10 @@ docker exec webapp cat /usr/share/nginx/html/index.html          # "Hello CUA!"
 - Check container status (running/paused/exited are valid)
 - Validate Docker connection before any operations
 
-#### **Atomic Operations**
-- Metadata updates are atomic (write to temp file, then move)
+#### **Operation Safety**
 - Index updates happen after successful snapshot creation
-- Failed operations don't leave partial state
+- Failed operations are cleaned up automatically
+- Operation locks prevent concurrent conflicts on same container
 
 ### **Future Extensibility**
 
@@ -408,8 +422,8 @@ docker exec webapp cat /usr/share/nginx/html/index.html          # "Hello CUA!"
 - Current filesystem implementation optimized for development
 
 #### **Trigger System**
-- Extensible enum allows new triggers (periodic, error-based, etc.)
-- Callback system can be enhanced without breaking changes
+- Extensible enum designed for future automatic triggers
+- Manual trigger system can be extended without breaking changes
 
 ## Development
 
