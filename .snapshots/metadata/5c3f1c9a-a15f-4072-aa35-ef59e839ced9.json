@@ -1,0 +1,90 @@
+{
+  "snapshot_id": "5c3f1c9a-a15f-4072-aa35-ef59e839ced9",
+  "container_id": "94ec75cf7c43bd334406a43ed16c763f8ac57920150721d940698c81d3f3ca5d",
+  "container_name": "test-snapshot-container",
+  "timestamp": "2025-08-15T09:50:55.616600",
+  "trigger": "manual",
+  "action_context": null,
+  "run_id": null,
+  "status": "completed",
+  "image_id": "sha256:e2fad7b05f0311a4013b69a784ec4399275e0ea40e48bb0d1ab4d284dace1564",
+  "image_tag": "cua-snapshot/test-snapshot-container:manual-20250815_095055",
+  "storage_path": null,
+  "size_bytes": 8311385,
+  "description": "First test snapshot",
+  "labels": {
+    "docker.image.id": "sha256:e2fad7b05f0311a4013b69a784ec4399275e0ea40e48bb0d1ab4d284dace1564",
+    "docker.container.id": "94ec75cf7c43bd334406a43ed16c763f8ac57920150721d940698c81d3f3ca5d",
+    "docker.container.name": "test-snapshot-container",
+    "docker.created": "2025-08-15T09:50:55.770778",
+    "cua.snapshot.version": "1.0"
+  },
+  "agent_metadata": {
+    "original_config": {
+      "Hostname": "94ec75cf7c43",
+      "Domainname": "",
+      "User": "",
+      "AttachStdin": false,
+      "AttachStdout": false,
+      "AttachStderr": false,
+      "Tty": false,
+      "OpenStdin": false,
+      "StdinOnce": false,
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "Cmd": [
+        "sleep",
+        "300"
+      ],
+      "Image": "alpine:latest",
+      "Volumes": null,
+      "WorkingDir": "/",
+      "Entrypoint": null,
+      "OnBuild": null,
+      "Labels": {}
+    },
+    "original_mounts": [],
+    "original_network_settings": {
+      "Bridge": "",
+      "SandboxID": "32b889efa0478870c04701b665f88448ea60dabce49cb8e55b5d5062e12a93b2",
+      "SandboxKey": "/var/run/docker/netns/32b889efa047",
+      "Ports": {},
+      "HairpinMode": false,
+      "LinkLocalIPv6Address": "",
+      "LinkLocalIPv6PrefixLen": 0,
+      "SecondaryIPAddresses": null,
+      "SecondaryIPv6Addresses": null,
+      "EndpointID": "f01169372890d9208249557bc1fe14239cff64387e57836c4034d0c452ccd48d",
+      "Gateway": "172.17.0.1",
+      "GlobalIPv6Address": "",
+      "GlobalIPv6PrefixLen": 0,
+      "IPAddress": "172.17.0.2",
+      "IPPrefixLen": 16,
+      "IPv6Gateway": "",
+      "MacAddress": "06:0b:b2:22:f4:32",
+      "Networks": {
+        "bridge": {
+          "IPAMConfig": null,
+          "Links": null,
+          "Aliases": null,
+          "MacAddress": "06:0b:b2:22:f4:32",
+          "DriverOpts": null,
+          "GwPriority": 0,
+          "NetworkID": "a7f9bcb1a87e1aca2ef0e69f2fdf7cec6f3df2009117c1d3597a9f692b9b9e61",
+          "EndpointID": "f01169372890d9208249557bc1fe14239cff64387e57836c4034d0c452ccd48d",
+          "Gateway": "172.17.0.1",
+          "IPAddress": "172.17.0.2",
+          "IPPrefixLen": 16,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "GlobalIPv6PrefixLen": 0,
+          "DNSNames": null
+        }
+      }
+    },
+    "original_image": "sha256:9234e8fb04c47cfe0f49931e4ac7eb76fa904e33b7f8576aec0501c085f02516"
+  },
+  "parent_snapshot_id": null,
+  "restoration_count": 2
+}
