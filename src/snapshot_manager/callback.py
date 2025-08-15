@@ -6,26 +6,31 @@ to automatically create snapshots at appropriate lifecycle events.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+import asyncio
+from typing import Dict, List, Any, Optional
+
+try:
+    from agent.callbacks.base import AsyncCallbackHandler
+    HAVE_CUA_SDK = True
+except ImportError:
+    # Fallback for when CUA SDK is not available
+    class AsyncCallbackHandler:
+        pass
+    HAVE_CUA_SDK = False
 
 from .manager import SnapshotManager
-from .models import SnapshotConfig, SnapshotTrigger
+from .models import SnapshotTrigger, SnapshotConfig
 
 logger = logging.getLogger(__name__)
 
 
-class SnapshotCallback:
+class SnapshotCallback(AsyncCallbackHandler):
     """
     CUA Agent SDK callback handler for snapshot management.
-
+    
     This callback integrates with the agent's lifecycle to automatically
     create snapshots when configured events occur. It's designed to be
     pluggable and non-intrusive to existing agent workflows.
-
-    Note: This is a standalone implementation that follows the CUA callback
-    pattern but doesn't inherit from AsyncCallbackHandler to avoid
-    dependency issues. In a real integration, this would inherit from
-    the actual CUA AsyncCallbackHandler base class.
     """
 
     def __init__(

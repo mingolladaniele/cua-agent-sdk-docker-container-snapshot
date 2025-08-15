@@ -1,4 +1,15 @@
-"""CUA Agent + Snapshot Manager Integration Test"""
+"""
+CUA Agent + Snapshot Manager Integration Test
+
+This test demonstrates the complete snapshot workflow:
+1. Create a CUA Computer container
+2. Take initial snapshot (before agent actions)
+3. Run agent to create a test file
+4. Take final snapshot (after agent actions)
+5. Verify file was created in the container
+6. Restore initial snapshot to new container
+7. Verify restored container doesn't have the file (proves snapshot integrity)
+"""
 
 import asyncio
 import logging
@@ -9,6 +20,7 @@ from dotenv import load_dotenv
 from agent import ComputerAgent
 from computer import Computer
 from snapshot_manager import SnapshotManager, SnapshotTrigger, SnapshotConfig
+from snapshot_manager.models import RestoreOptions
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -86,11 +98,36 @@ async def cua_snapshot_test():
             else:
                 print(f"❌ File not found: {stderr.decode().strip() if stderr else 'No output'}")
             
-            # Compare snapshots
-            print("📊 Snapshot comparison:")
-            print(f"   Initial: {initial_snapshot.timestamp.strftime('%H:%M:%S')} - {initial_snapshot.size_bytes:,} bytes")
-            print(f"   Final:   {final_snapshot.timestamp.strftime('%H:%M:%S')} - {final_snapshot.size_bytes:,} bytes")
-            print(f"   Diff:    {final_snapshot.size_bytes - initial_snapshot.size_bytes:,} bytes added")
+            # Test snapshot restoration
+            print("📊 Testing snapshot restoration...")
+            
+            # Restore initial snapshot (should NOT have test.txt)
+            print("🔄 Restoring initial snapshot...")
+            restore_options = RestoreOptions(new_container_name=f"{container_name}-restored")
+            await snapshot_manager.restore_snapshot(
+                snapshot_id=initial_snapshot.snapshot_id,
+                options=restore_options
+            )
+            
+            # Check if test.txt exists in restored container (should be NO)
+            check_cmd = await asyncio.create_subprocess_exec(
+                "docker", "exec", f"{container_name}-restored", "sh", "-c", 
+                "test -f test.txt && echo 'YES' || echo 'NO'",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await check_cmd.communicate()
+            initial_has_file = stdout.decode().strip() == "YES"
+            
+            print(f"   Restored container has test.txt: {'❌ NO' if not initial_has_file else '✅ YES'}")
+            
+            # Clean up restored container
+            await asyncio.create_subprocess_exec("docker", "rm", "-f", f"{container_name}-restored")
+            
+            if not initial_has_file:
+                print("🎉 Perfect! Snapshot restoration works correctly!")
+            else:
+                print("⚠️  Unexpected: file exists in initial snapshot")
             
     except Exception as e:
         print(f"❌ Test failed: {e}")
