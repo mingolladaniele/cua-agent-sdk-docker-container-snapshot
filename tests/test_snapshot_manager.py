@@ -135,6 +135,68 @@ class TestSnapshotManager:
         snapshots = await snapshot_manager.list_snapshots()
         assert len(snapshots) == 3
 
+    @pytest.mark.asyncio
+    async def test_delete_snapshot(self, snapshot_manager):
+        """Test deleting individual snapshots."""
+        # Create a snapshot
+        metadata = await snapshot_manager.create_snapshot(
+            "test_container", SnapshotTrigger.MANUAL, description="To be deleted"
+        )
+        
+        # Verify it exists
+        snapshots = await snapshot_manager.list_snapshots()
+        assert len(snapshots) == 1
+        
+        # Delete it
+        await snapshot_manager.delete_snapshot(metadata.snapshot_id)
+        
+        # Verify it's gone
+        snapshots = await snapshot_manager.list_snapshots()
+        assert len(snapshots) == 0
+
+    @pytest.mark.asyncio
+    async def test_cleanup_old_snapshots(self, snapshot_manager):
+        """Test time-based cleanup of old snapshots."""
+        from datetime import datetime, timedelta
+        from unittest.mock import patch
+        
+        # Create snapshots with different ages by mocking timestamp
+        snapshots_created = []
+        
+        # Create an "old" snapshot (10 days ago)
+        with patch('snapshot_manager.models.datetime') as mock_datetime:
+            old_time = datetime.now() - timedelta(days=10)
+            mock_datetime.now.return_value = old_time
+            
+            old_snapshot = await snapshot_manager.create_snapshot(
+                "test_container", SnapshotTrigger.MANUAL, description="Old snapshot"
+            )
+            # Manually update the timestamp in storage
+            old_snapshot.timestamp = old_time
+            await snapshot_manager.storage.update_metadata(old_snapshot)
+            snapshots_created.append(old_snapshot)
+        
+        # Create a recent snapshot (1 day ago)
+        recent_snapshot = await snapshot_manager.create_snapshot(
+            "test_container", SnapshotTrigger.MANUAL, description="Recent snapshot"
+        )
+        snapshots_created.append(recent_snapshot)
+        
+        # Verify we have 2 snapshots
+        all_snapshots = await snapshot_manager.list_snapshots()
+        assert len(all_snapshots) == 2
+        
+        # Cleanup snapshots older than 5 days
+        cleaned_count = await snapshot_manager.cleanup_old_snapshots(max_age_days=5)
+        
+        # Should have cleaned up 1 old snapshot
+        assert cleaned_count == 1
+        
+        # Verify only recent snapshot remains
+        remaining_snapshots = await snapshot_manager.list_snapshots()
+        assert len(remaining_snapshots) == 1
+        assert remaining_snapshots[0].snapshot_id == recent_snapshot.snapshot_id
+
 
 class TestDockerSnapshotProvider:
     """Critical tests for DockerSnapshotProvider."""
