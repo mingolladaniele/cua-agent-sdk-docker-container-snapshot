@@ -12,6 +12,10 @@ Enable CUA agents to create and restore container snapshots at key execution poi
 
 ## System Overview
 
+![System Architecture](img/infra_diagram.png)
+
+*Figure: Snapshot Manager Architecture - Shows the interaction between user interfaces (CLI, Python API, CUA Callback), core management layer (SnapshotManager), abstract interfaces, concrete implementations, and external systems.*
+
 ### Core Components
 
 #### 1. **SnapshotManager** - Central Orchestrator
@@ -52,16 +56,8 @@ The system automatically creates snapshots based on configurable triggers:
 - **`RUN_END`**: End of agent execution  
 - **`BEFORE_ACTION`**: Before each agent action (click, type, screenshot, etc.)
 - **`AFTER_ACTION`**: After each agent action completes
-- **`ON_ERROR`**: When errors occur (planned)
-- **`PERIODIC`**: Time-based intervals (planned)
-
-### Data Flow
-
-1. **CUA Agent starts** → Callback triggers `RUN_START` snapshot
-2. **Agent decides on action** → Callback triggers `BEFORE_ACTION` snapshot
-3. **Agent performs action** → Action executes (click, type, etc.)
-4. **Action completes** → Callback triggers `AFTER_ACTION` snapshot
-5. **Agent finishes** → Callback triggers `RUN_END` snapshot
+- **`ON_ERROR`**: When errors occur
+- **`PERIODIC`**: Time-based intervals
 
 ## Main Features
 
@@ -91,7 +87,7 @@ uv sync
 
 ### Prerequisites
 - Docker Desktop running
-- Python 3.8+
+- Python 3.10+
 - A running Docker container to snapshot
 
 ### Basic Usage
@@ -129,34 +125,88 @@ uv run snapshot-manager cleanup --max-age-days 7
 #### CUA Agent Integration
 
 ```python
-from snapshot_manager import SnapshotCallback, SnapshotConfig, SnapshotTrigger
+import asyncio
+import logging
+import os
+from dotenv import load_dotenv
+from agent import ComputerAgent
+from computer import Computer
+from snapshot_manager import SnapshotManager, SnapshotTrigger, SnapshotConfig
+from snapshot_manager.models import RestoreOptions
 
-# Configure snapshot behavior
-config = SnapshotConfig(
-    triggers=[SnapshotTrigger.RUN_START, SnapshotTrigger.RUN_END],
-    max_snapshots_per_container=5,
-    storage_path="./agent_snapshots"
-)
+load_dotenv()
 
-# Create callback for CUA Agent
-snapshot_callback = SnapshotCallback(config=config)
+async def cua_integration_example():
+    """Example of CUA Agent with Snapshot Manager integration"""
+    
+    # Configure snapshot behavior
+    config = SnapshotConfig(
+        triggers=[SnapshotTrigger.RUN_START, SnapshotTrigger.RUN_END],
+        max_snapshots_per_container=5,
+        storage_path="./agent_snapshots"
+    )
+    
+    snapshot_manager = SnapshotManager(config=config)
+    container_name = "cua-test-container"
+    
+    # Create CUA Computer with explicit container name
+    async with Computer(
+        os_type="linux",
+        provider_type="docker", 
+        name=container_name
+    ) as computer:
+        
+        # Take initial snapshot
+        initial_snapshot = await snapshot_manager.create_snapshot(
+            container_id=container_name,
+            trigger=SnapshotTrigger.MANUAL,
+            description="Before agent execution"
+        )
+        
+        # Create and run agent
+        agent = ComputerAgent(
+            model="anthropic/claude-3-7-sonnet-20250219",
+            tools=[computer],
+            verbosity=logging.WARNING
+        )
+        
+        # Execute agent task
+        prompt = "Open a terminal and create a file called 'test.txt' with content 'Hello CUA'"
+        async for result in agent.run(prompt):
+            if result.get("output"):
+                for item in result["output"]:
+                    if item["type"] == "computer_call":
+                        print(f"Action: {item['action']['type']}")
+        
+        # Take final snapshot
+        final_snapshot = await snapshot_manager.create_snapshot(
+            container_id=container_name,
+            trigger=SnapshotTrigger.MANUAL,
+            description="After agent execution"
+        )
+        
+        # Later restore if needed
+        restore_options = RestoreOptions(new_container_name=f"{container_name}-restored")
+        await snapshot_manager.restore_snapshot(
+            snapshot_id=initial_snapshot.snapshot_id,
+            options=restore_options
+        )
 
-# Integrate with your agent
-agent = ComputerAgent(
-    model="anthropic/claude-3-5-sonnet-20241022",
-    tools=[computer],
-    callbacks=[snapshot_callback]  # Add snapshot support
-)
+# Run the example
+asyncio.run(cua_integration_example())
 ```
 
 #### Programmatic Usage
 
 ```python
 import asyncio
-from snapshot_manager import SnapshotManager, SnapshotTrigger
+from snapshot_manager import SnapshotManager, SnapshotTrigger, SnapshotConfig
+from snapshot_manager.models import RestoreOptions
 
 async def main():
-    manager = SnapshotManager()
+    # Configure with custom storage path
+    config = SnapshotConfig(storage_path="./my_snapshots")
+    manager = SnapshotManager(config=config)
     
     # Create snapshot
     metadata = await manager.create_snapshot(
@@ -167,9 +217,14 @@ async def main():
     
     # List snapshots
     snapshots = await manager.list_snapshots()
+    print(f"Found {len(snapshots)} snapshots")
     
-    # Restore later
-    container_id = await manager.restore_snapshot(metadata.snapshot_id)
+    # Restore to new container
+    restore_options = RestoreOptions(new_container_name="my-container-restored")
+    await manager.restore_snapshot(
+        snapshot_id=metadata.snapshot_id,
+        options=restore_options
+    )
 
 asyncio.run(main())
 ```
