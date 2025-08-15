@@ -34,15 +34,19 @@ def main(ctx, config, storage_path, verbose):
         logging.getLogger().setLevel(logging.DEBUG)
 
     # Load configuration
-    snapshot_config = SnapshotConfig(storage_path=storage_path)
     if config:
         try:
             with open(config, "r") as f:
                 config_data = json.load(f)
+                # CLI storage_path takes precedence over config file
+                if storage_path != ".snapshots":  # Only override if explicitly set
+                    config_data["storage_path"] = storage_path
                 snapshot_config = SnapshotConfig(**config_data)
         except Exception as e:
             click.echo(f"Error loading config: {e}", err=True)
             sys.exit(1)
+    else:
+        snapshot_config = SnapshotConfig(storage_path=storage_path)
 
     # Initialize snapshot manager
     from .providers import DockerSnapshotProvider

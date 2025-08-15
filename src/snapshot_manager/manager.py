@@ -47,9 +47,9 @@ class SnapshotManager:
             storage: Storage backend (defaults to FileSystemSnapshotStorage)
             config: Configuration (defaults to SnapshotConfig with sensible defaults)
         """
-        self.provider = provider or DockerSnapshotProvider()
-        self.storage = storage or FileSystemSnapshotStorage()
         self.config = config or SnapshotConfig()
+        self.provider = provider or DockerSnapshotProvider()
+        self.storage = storage or FileSystemSnapshotStorage(base_path=self.config.storage_path)
 
         # Track active operations to prevent conflicts
         self._active_operations: Dict[str, str] = {}  # container_id -> operation_type
