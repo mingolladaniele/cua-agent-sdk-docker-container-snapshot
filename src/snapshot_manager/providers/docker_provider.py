@@ -108,7 +108,7 @@ class DockerSnapshotProvider(SnapshotProvider):
             container_info = self._get_container_info(container_id)
 
             # Check if container is in a state that can be snapshotted
-            valid_statuses = ["running", "paused", "exited"]
+            valid_statuses = ["running", "paused", "exited", "created"]
             if container_info["status"] not in valid_statuses:
                 logger.warning(
                     f"Container {container_id} has status '{container_info['status']}', may not be snapshotable"
