@@ -105,14 +105,25 @@ uv run snapshot-manager create my-container --description "Before risky operatio
 # List snapshots
 uv run snapshot-manager list
 
+# Use custom storage path (default is .snapshots)
+uv run snapshot-manager --storage-path ./my_snapshots list
+
 # Restore from snapshot
 uv run snapshot-manager restore <snapshot-id> --container-name restored-container
+
+# Restore from custom storage location
+uv run snapshot-manager --storage-path ./my_snapshots restore <snapshot-id> --container-name restored-container
 
 # View storage statistics
 uv run snapshot-manager stats
 
 # Clean up old snapshots
 uv run snapshot-manager cleanup --max-age-days 7
+
+# Global options (available for all commands):
+# --storage-path PATH     Base path for snapshot storage (default: .snapshots)
+# --config FILE          Load configuration from JSON file
+# --verbose, -v          Enable verbose logging
 ```
 
 #### CUA Agent Integration
@@ -209,30 +220,32 @@ safety_config = SnapshotConfig(
 # 1. Start a test container
 docker run -d --name webapp nginx:alpine
 
-# 2. Create initial snapshot
-uv run snapshot-manager create webapp --description "Clean nginx installation"
+# 2. Create initial snapshot (using custom storage path)
+uv run snapshot-manager --storage-path ./my_snapshots create webapp --description "Clean nginx installation"
 
 # 3. Make changes to container
 docker exec webapp sh -c "echo 'Hello CUA!' > /usr/share/nginx/html/index.html"
 
 # 4. Create snapshot after changes
-uv run snapshot-manager create webapp --description "Added custom content"
+uv run snapshot-manager --storage-path ./my_snapshots create webapp --description "Added custom content"
 
 # 5. List all snapshots
-uv run snapshot-manager list
+uv run snapshot-manager --storage-path ./my_snapshots list
 
 # 6. Restore to previous state
-uv run snapshot-manager restore <first-snapshot-id> --container-name webapp-restored
+uv run snapshot-manager --storage-path ./my_snapshots restore <first-snapshot-id> --container-name webapp-restored
 
 # 7. Verify restoration worked
 docker exec webapp-restored cat /usr/share/nginx/html/index.html  # Original page
 docker exec webapp cat /usr/share/nginx/html/index.html          # "Hello CUA!"
+
+# Note: If no --storage-path is specified, snapshots are stored in .snapshots/ directory
 ```
 
 ## Storage Structure
 
 ```
-.snapshots/
+<storage-path>/              # Default: .snapshots/ (configurable via --storage-path)
 ├── metadata/
 │   ├── snapshot-uuid-1.json  # Individual snapshot metadata
 │   ├── snapshot-uuid-2.json
