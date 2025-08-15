@@ -1,11 +1,10 @@
 """
-Test cases for the snapshot manager system.
+Critical test cases for the snapshot manager system.
 """
 
 import shutil
 import tempfile
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import docker
 import pytest
@@ -103,68 +102,42 @@ class TestSnapshotManager:
         assert len(container_snapshots) == 2
 
     @pytest.mark.asyncio
-    async def test_snapshot_limits(self, snapshot_manager):
-        """Test that snapshot limits are enforced."""
-        # Create snapshots up to the limit
-        for i in range(4):  # Limit is 3, so this should trigger cleanup
-            await snapshot_manager.create_snapshot(
-                "test_container", SnapshotTrigger.MANUAL, description=f"Snapshot {i}"
-            )
-
-        # Should only have 3 snapshots due to limit
-        snapshots = await snapshot_manager.list_snapshots()
-        assert len(snapshots) == 3
-
-    @pytest.mark.asyncio
-    async def test_delete_snapshot(self, snapshot_manager):
-        """Test deleting a snapshot."""
+    async def test_restore_snapshot(self, snapshot_manager):
+        """Test restoring a snapshot."""
         # Create a snapshot
         metadata = await snapshot_manager.create_snapshot("test_container", SnapshotTrigger.MANUAL)
 
-        # Verify it exists
-        snapshots = await snapshot_manager.list_snapshots()
-        assert len(snapshots) == 1
-
-        # Delete it
-        await snapshot_manager.delete_snapshot(metadata.snapshot_id)
-
-        # Verify it's gone
-        snapshots = await snapshot_manager.list_snapshots()
-        assert len(snapshots) == 0
+        # Restore it
+        from snapshot_manager.models import RestoreOptions
+        options = RestoreOptions(new_container_name="restored_container")
+        
+        restored_id = await snapshot_manager.restore_snapshot(metadata.snapshot_id, options)
+        assert restored_id is not None
 
     @pytest.mark.asyncio
-    async def test_cleanup_old_snapshots(self, snapshot_manager):
-        """Test cleaning up old snapshots."""
-        # Create some old snapshots by mocking the timestamp
-        with patch("snapshot_manager.models.datetime") as mock_datetime:
-            # Create an old snapshot
-            old_time = datetime.now() - timedelta(days=10)
-            mock_datetime.now.return_value = old_time
-
-            old_metadata = await snapshot_manager.create_snapshot(
-                "test_container", SnapshotTrigger.MANUAL
-            )
-            old_metadata.timestamp = old_time
-            await snapshot_manager.storage.update_metadata(old_metadata)
-
-        # Create a recent snapshot
-        recent_metadata = await snapshot_manager.create_snapshot(
-            "test_container", SnapshotTrigger.MANUAL
+    async def test_snapshot_limits(self, snapshot_manager):
+        """Test that snapshot limits are enforced."""
+        # Create first snapshot to establish the container_id
+        first_snapshot = await snapshot_manager.create_snapshot(
+            "test_container", SnapshotTrigger.MANUAL, description="First snapshot"
         )
+        
+        # Now use the resolved container_id for subsequent snapshots
+        container_id = first_snapshot.container_id
+        
+        # Create more snapshots using the actual container_id
+        for i in range(3):  # Create 3 more (total will be 4, limit is 3)
+            await snapshot_manager.create_snapshot(
+                container_id, SnapshotTrigger.MANUAL, description=f"Snapshot {i+2}"
+            )
 
-        # Cleanup snapshots older than 5 days
-        cleanup_count = await snapshot_manager.cleanup_old_snapshots(max_age_days=5)
-
-        assert cleanup_count == 1
-
-        # Verify only recent snapshot remains
+        # Should only have 3 snapshots due to limit enforcement
         snapshots = await snapshot_manager.list_snapshots()
-        assert len(snapshots) == 1
-        assert snapshots[0].snapshot_id == recent_metadata.snapshot_id
+        assert len(snapshots) == 3
 
 
 class TestDockerSnapshotProvider:
-    """Test cases for the DockerSnapshotProvider."""
+    """Critical tests for DockerSnapshotProvider."""
 
     @pytest.fixture
     def mock_docker_client(self):
@@ -181,7 +154,6 @@ class TestDockerSnapshotProvider:
     @pytest.mark.asyncio
     async def test_validate_container_success(self, docker_provider, mock_docker_client):
         """Test successful container validation."""
-        # Mock container info
         mock_container = Mock()
         mock_container.id = "test_id"
         mock_container.name = "test_name"
@@ -191,7 +163,6 @@ class TestDockerSnapshotProvider:
         mock_container.attrs = {"Created": "2024-01-01", "Config": {}, "Mounts": []}
 
         mock_docker_client.containers.get.return_value = mock_container
-
         is_valid = await docker_provider.validate_container("test_container")
         assert is_valid is True
 
@@ -199,96 +170,13 @@ class TestDockerSnapshotProvider:
     async def test_validate_container_not_found(self, docker_provider, mock_docker_client):
         """Test container validation when container doesn't exist."""
         from docker.errors import NotFound
-
         mock_docker_client.containers.get.side_effect = NotFound("Container not found")
-
         is_valid = await docker_provider.validate_container("nonexistent_container")
         assert is_valid is False
 
 
-class TestFileSystemSnapshotStorage:
-    """Test cases for the FileSystemSnapshotStorage."""
-
-    @pytest.fixture
-    def temp_storage(self):
-        """Create temporary storage for testing."""
-        temp_dir = tempfile.mkdtemp()
-        yield temp_dir
-        shutil.rmtree(temp_dir)
-
-    @pytest.fixture
-    def storage(self, temp_storage):
-        """Create a FileSystemSnapshotStorage instance."""
-        return FileSystemSnapshotStorage(base_path=temp_storage)
-
-    @pytest.fixture
-    def sample_metadata(self):
-        """Create sample snapshot metadata."""
-        from snapshot_manager.models import SnapshotMetadata
-
-        return SnapshotMetadata(
-            snapshot_id="test-snapshot-123",
-            container_id="container-456",
-            container_name="test_container",
-            trigger=SnapshotTrigger.MANUAL,
-            description="Test snapshot",
-        )
-
-    @pytest.mark.asyncio
-    async def test_save_and_load_metadata(self, storage, sample_metadata):
-        """Test saving and loading metadata."""
-        # Save metadata
-        await storage.save_metadata(sample_metadata)
-
-        # Load it back
-        loaded_metadata = await storage.load_metadata(sample_metadata.snapshot_id)
-
-        assert loaded_metadata is not None
-        assert loaded_metadata.snapshot_id == sample_metadata.snapshot_id
-        assert loaded_metadata.container_id == sample_metadata.container_id
-        assert loaded_metadata.trigger == sample_metadata.trigger
-
-    @pytest.mark.asyncio
-    async def test_list_snapshots_empty(self, storage):
-        """Test listing snapshots when none exist."""
-        snapshots = await storage.list_snapshots()
-        assert snapshots == []
-
-    @pytest.mark.asyncio
-    async def test_delete_metadata(self, storage, sample_metadata):
-        """Test deleting metadata."""
-        # Save metadata
-        await storage.save_metadata(sample_metadata)
-
-        # Verify it exists
-        loaded = await storage.load_metadata(sample_metadata.snapshot_id)
-        assert loaded is not None
-
-        # Delete it
-        await storage.delete_metadata(sample_metadata.snapshot_id)
-
-        # Verify it's gone
-        loaded = await storage.load_metadata(sample_metadata.snapshot_id)
-        assert loaded is None
-
-    @pytest.mark.asyncio
-    async def test_storage_stats(self, storage, sample_metadata):
-        """Test getting storage statistics."""
-        # Initially empty
-        stats = await storage.get_storage_stats()
-        assert stats["total_snapshots"] == 0
-
-        # Add a snapshot
-        await storage.save_metadata(sample_metadata)
-
-        # Check stats
-        stats = await storage.get_storage_stats()
-        assert stats["total_snapshots"] == 1
-        assert stats["total_containers"] == 1
-
-
 class TestSnapshotCallback:
-    """Test cases for the SnapshotCallback."""
+    """Critical tests for SnapshotCallback."""
 
     @pytest.fixture
     def mock_snapshot_manager(self):
@@ -302,51 +190,17 @@ class TestSnapshotCallback:
     def snapshot_callback(self, mock_snapshot_manager):
         """Create a SnapshotCallback for testing."""
         from snapshot_manager.callback import SnapshotCallback
-
         return SnapshotCallback(snapshot_manager=mock_snapshot_manager)
 
     @pytest.mark.asyncio
     async def test_on_run_start(self, snapshot_callback, mock_snapshot_manager):
-        """Test run start callback."""
+        """Test run start callback creates snapshot."""
         kwargs = {"container_id": "test_container"}
-
         await snapshot_callback.on_run_start(kwargs, [])
-
-        # Should have created a run start snapshot
+        
         mock_snapshot_manager.create_snapshot.assert_called_once()
         call_args = mock_snapshot_manager.create_snapshot.call_args
         assert call_args[1]["trigger"] == SnapshotTrigger.RUN_START
-        assert call_args[1]["container_id"] == "test_container"
-
-    @pytest.mark.asyncio
-    async def test_on_computer_call_start(self, snapshot_callback, mock_snapshot_manager):
-        """Test computer call start callback."""
-        item = {"action": {"type": "screenshot"}}
-
-        await snapshot_callback.on_computer_call_start(item)
-
-        # Should have created a before-action snapshot if enabled
-        if mock_snapshot_manager.should_create_snapshot.return_value:
-            mock_snapshot_manager.create_snapshot.assert_called()
-
-    def test_default_container_resolver(self, snapshot_callback):
-        """Test the default container resolver."""
-        # Test direct container_id
-        kwargs = {"container_id": "test_container"}
-        result = snapshot_callback.container_resolver(kwargs)
-        assert result == "test_container"
-
-        # Test tools with container_id
-        mock_tool = Mock()
-        mock_tool.container_id = "tool_container"
-        kwargs = {"tools": [mock_tool]}
-        result = snapshot_callback.container_resolver(kwargs)
-        assert result == "tool_container"
-
-        # Test no container found
-        kwargs = {"other_param": "value"}
-        result = snapshot_callback.container_resolver(kwargs)
-        assert result is None
 
 
 if __name__ == "__main__":

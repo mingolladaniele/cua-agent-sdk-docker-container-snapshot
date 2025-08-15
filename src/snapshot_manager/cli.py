@@ -244,9 +244,8 @@ def cleanup(ctx, max_age_days, dry_run):
 
         try:
             if dry_run:
-                click.echo("🔍 Dry run mode - showing what would be deleted:")
-                # TODO: Implement dry run logic
-                click.echo("Dry run not yet implemented")
+                click.echo("🔍 Dry run mode not implemented yet")
+                return
             else:
                 count = await manager.cleanup_old_snapshots(max_age_days)
                 click.echo(f"✅ Cleaned up {count} old snapshots")

@@ -276,6 +276,86 @@ docker exec webapp cat /usr/share/nginx/html/index.html          # "Hello CUA!"
 }
 ```
 
+## Design Decisions & Architecture
+
+### **Core Architecture Choices**
+
+#### **1. Provider-Storage Separation**
+- **Decision**: Separate snapshot creation (provider) from metadata storage (storage)
+- **Rationale**: Enables swapping Docker for other container technologies (K8s, Podman) without changing storage logic
+- **Tradeoff**: Slightly more complex but much more extensible
+
+#### **2. Docker Commit vs. Export/Import**
+- **Decision**: Use `docker commit` to create images rather than `docker export`
+- **Rationale**: Preserves layers, faster restoration, integrates with Docker's native workflow
+- **Tradeoff**: Larger storage but better performance and compatibility
+
+#### **3. JSON Metadata with Index**
+- **Decision**: Individual JSON files per snapshot + master index
+- **Rationale**: Human-readable, easily debuggable, atomic operations, efficient queries
+- **Tradeoff**: Not as performant as databases but simpler and more reliable
+
+#### **4. Async-First Design**
+- **Decision**: All operations are asynchronous
+- **Rationale**: Non-blocking integration with CUA Agent SDK, better resource utilization
+- **Tradeoff**: Slightly more complex API but essential for production use
+
+#### **5. Callback-Based Integration**
+- **Decision**: Hook into CUA SDK via callback system
+- **Rationale**: Clean, opt-in integration that doesn't break existing workflows
+- **Tradeoff**: Requires callback setup but maintains system integrity
+
+### **Performance & Storage Decisions**
+
+#### **Retention Policies**
+- **Per-container limits**: Prevent runaway storage from single containers
+- **Global limits**: System-wide protection against storage exhaustion  
+- **Time-based cleanup**: Automatic removal of old snapshots
+- **Size-based limits**: Optional storage size constraints
+
+#### **Image Naming Strategy**
+- **Pattern**: `cua-snapshot/{container}:{trigger}-{timestamp}`
+- **Rationale**: Human-readable, sortable, avoids conflicts
+- **Example**: `cua-snapshot/webapp:manual-20240815_143022`
+
+### **Error Handling Philosophy**
+
+#### **Graceful Degradation**
+- Snapshot failures don't break agent execution
+- Missing snapshots are logged but don't crash restoration
+- Invalid containers are detected before operations
+
+#### **Operation Locking**
+- Prevents concurrent snapshots of same container
+- Avoids race conditions during restoration
+- Ensures data consistency
+
+### **Security & Reliability**
+
+#### **Container Validation**
+- Verify container exists and is in valid state before operations
+- Check container status (running/paused/exited are valid)
+- Validate Docker connection before any operations
+
+#### **Atomic Operations**
+- Metadata updates are atomic (write to temp file, then move)
+- Index updates happen after successful snapshot creation
+- Failed operations don't leave partial state
+
+### **Future Extensibility**
+
+#### **Provider Interface**
+- Abstract base class allows multiple container technologies
+- K8s, Podman, LXC providers can be added without core changes
+
+#### **Storage Interface** 
+- Abstract storage enables databases, cloud storage, etc.
+- Current filesystem implementation optimized for development
+
+#### **Trigger System**
+- Extensible enum allows new triggers (periodic, error-based, etc.)
+- Callback system can be enhanced without breaking changes
+
 ## Development
 
 ```bash

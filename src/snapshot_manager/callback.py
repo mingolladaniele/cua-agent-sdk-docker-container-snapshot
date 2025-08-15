@@ -6,7 +6,6 @@ to automatically create snapshots at appropriate lifecycle events.
 """
 
 import logging
-import asyncio
 from typing import Dict, List, Any, Optional
 
 try:

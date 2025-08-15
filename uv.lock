@@ -1119,6 +1119,8 @@ dev = [
 dev = [
     { name = "black" },
     { name = "isort" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "ruff" },
 ]
 
@@ -1142,6 +1144,8 @@ provides-extras = ["dev"]
 dev = [
     { name = "black", specifier = ">=24.8.0" },
     { name = "isort", specifier = ">=5.13.2" },
+    { name = "pytest", specifier = ">=8.4.1" },
+    { name = "pytest-asyncio", specifier = ">=1.1.0" },
     { name = "ruff", specifier = ">=0.12.9" },
 ]
 
